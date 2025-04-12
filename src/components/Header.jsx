@@ -1,6 +1,6 @@
 import { AppBar, Toolbar, Typography, Box, Container, Button, IconButton, useMediaQuery, Avatar, Chip } from '@mui/material';
 import { styled, useTheme, alpha } from '@mui/material/styles';
-import { ExitToApp as LogoutIcon, Person as PersonIcon } from '@mui/icons-material';
+import { ExitToApp as LogoutIcon, Person as PersonIcon, Brightness4 as DarkModeIcon, Brightness7 as LightModeIcon } from '@mui/icons-material';
 import appLogo from '../assets/applogo.jpeg';
 
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
@@ -109,7 +109,16 @@ const UserChip = styled(Chip)(({ theme }) => ({
   }
 }));
 
-const Header = ({ isAuthenticated, userName, onLogout }) => {
+const ThemeToggleButton = styled(IconButton)(({ theme }) => ({
+  marginLeft: theme.spacing(2),
+  color: theme.palette.primary.main,
+  backgroundColor: alpha(theme.palette.primary.main, 0.08),
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.primary.main, 0.15),
+  },
+}));
+
+const Header = ({ isAuthenticated, userName, onLogout, isDarkMode, onThemeToggle }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -136,6 +145,20 @@ const Header = ({ isAuthenticated, userName, onLogout }) => {
                 />
               )}
               
+              <ThemeToggleButton
+                onClick={onThemeToggle}
+                size="small"
+                sx={{ 
+                  mr: 2,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    transform: 'rotate(180deg)',
+                  }
+                }}
+              >
+                {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </ThemeToggleButton>
+
               {isMobile ? (
                 <IconButton 
                   color="primary" 
