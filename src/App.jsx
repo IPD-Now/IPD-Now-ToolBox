@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Box, CircularProgress, Snackbar, Alert } from '@mui/material';
+import { Box, CircularProgress, Snackbar, Alert, Tabs, Tab, Container, CssBaseline } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import Login from './components/Login';
 import Header from './components/Header';
 import DocumentList from './components/DocumentList';
-import theme from './theme';
+import NotificationsList from './components/NotificationsList';
+import { lightTheme, darkTheme } from './theme';
 import './App.css';
+import MessagePopup from './components/MessagePopup';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userName, setUserName] = useState('');
   const [documents, setDocuments] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true); 
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -44,13 +49,28 @@ function App() {
     checkAuth();
   }, []);
   
+  // Check for existing theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true);
+    }
+  }, []);
+
+  // Save theme preference
+  useEffect(() => {
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
   useEffect(() => {
     let isMounted = true;
 
     if (isAuthenticated) {
       fetchDocuments(isMounted);
+      fetchNotifications(isMounted);
     } else {
       setDocuments([]);
+      setNotifications([]);
     }
 
     return () => {
@@ -93,6 +113,28 @@ function App() {
     }
   };
 
+  const fetchNotifications = async (isMounted = true) => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'notifications'));
+      if (isMounted) {
+        const notifs = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setNotifications(notifs);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      if (isMounted) {
+        setSnackbar({
+          open: true,
+          message: 'Failed to load notifications',
+          severity: 'error'
+        });
+      }
+    }
+  };
+
   const handleLogin = ({ isAuthenticated: authStatus, error: loginError, userName: name }) => {
     setIsAuthenticated(authStatus);
     if (name) {
@@ -117,9 +159,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    // Clear authentication from localStorage
     localStorage.removeItem('isAuthenticated');
-    
     setIsAuthenticated(false);
     setDocuments([]);
     setSnackbar({
@@ -130,15 +170,12 @@ function App() {
   };
 
   const handleHospitalDeleted = (hospitalId) => {
-    // Update the documents list by removing the deleted hospital
     const updatedDocuments = documents.filter(doc => doc.id !== hospitalId);
     setDocuments(updatedDocuments);
 
-    // Find the deleted hospital name
     const deletedHospital = documents.find(doc => doc.id === hospitalId);
     const hospitalName = deletedHospital?.name || 'Hospital';
 
-    // Show success notification
     setSnackbar({
       open: true,
       message: `${hospitalName} has been deleted successfully`,
@@ -147,11 +184,8 @@ function App() {
   };
 
   const handleHospitalUpdated = (hospitalId, updatedHospital, refreshList = false) => {
-    // If refreshList is true, we need to refresh the entire list (used after creating a new hospital)
     if (refreshList) {
       fetchDocuments();
-      
-      // Show success notification
       setSnackbar({
         open: true,
         message: 'New hospital has been created successfully',
@@ -160,14 +194,12 @@ function App() {
       return;
     }
     
-    // Update the documents list with the edited hospital
     const updatedDocuments = documents.map(doc => 
       doc.id === hospitalId ? { ...doc, ...updatedHospital } : doc
     );
     
     setDocuments(updatedDocuments);
 
-    // Show success notification
     setSnackbar({
       open: true,
       message: `${updatedHospital.name} has been updated successfully`,
@@ -182,9 +214,18 @@ function App() {
     }));
   };
 
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  const handleThemeToggle = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
   if (loading) {
     return (
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
+        <CssBaseline />
         <Box 
           sx={{
             position: 'fixed',
@@ -197,7 +238,7 @@ function App() {
             alignItems: 'center',
             width: '100%',
             height: '100%',
-            bgcolor: theme.palette.background.default
+            bgcolor: 'background.default'
           }}
         >
           <CircularProgress color="primary" size={50} />
@@ -207,65 +248,106 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
+      <CssBaseline />
       {!isAuthenticated ? (
-        <Login onLogin={handleLogin} />
+        <Box sx={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          bgcolor: 'background.default',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <Login onLogin={handleLogin} />
+        </Box>
       ) : (
-        <Box 
-          sx={{ 
-            height: '100vh',
-            width: '100vw',
-            margin: 0,
-            padding: 0,
-            display: 'flex', 
-            flexDirection: 'column',
-            bgcolor: theme.palette.background.default,
-            overflow: 'hidden',
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0
-          }}
-        >
+        <Box sx={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          bgcolor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
           <Header 
             isAuthenticated={isAuthenticated}
             userName={userName}
             onLogout={handleLogout}
+            isDarkMode={isDarkMode}
+            onThemeToggle={handleThemeToggle}
           />
-          
           <Box 
             component="main" 
             sx={{ 
               flexGrow: 1,
-              flexShrink: 1,
-              overflowY: 'auto',
-              height: 'calc(100% - 76px)',
-              position: 'relative',
-              pb: 2,
-              mt: 0,
-              px: 0
+              overflow: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              width: '100%'
             }}
           >
-            {error && (
-              <Alert 
-                severity="error" 
-                sx={{ 
-                  mx: 3, 
-                  mt: 3, 
-                  borderRadius: 2,
-                  boxShadow: theme.shadows[2] 
+            <Container 
+              maxWidth={false} 
+              sx={{ 
+                flexGrow: 1, 
+                py: 3,
+                px: { xs: 2, sm: 3, md: 4 },
+                width: '100%',
+                maxWidth: '100%'
+              }}
+            >
+              {error && (
+                <Alert 
+                  severity="error" 
+                  sx={{ 
+                    mb: 3,
+                    borderRadius: 2,
+                    boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)' 
+                  }}
+                >
+                  {error}
+                </Alert>
+              )}
+              
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
+                sx={{
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  mb: 3,
+                  width: '100%'
                 }}
               >
-                {error}
-              </Alert>
-            )}
-            <DocumentList
-              documents={documents}
-              onDocumentDeleted={handleHospitalDeleted}
-              onDocumentUpdated={handleHospitalUpdated}
-            />
+                <Tab label="Hospitals" />
+                <Tab label="Notifications" />
+              </Tabs>
+
+              <Box sx={{ flexGrow: 1, width: '100%' }}>
+                {activeTab === 0 && (
+                  <DocumentList
+                    documents={documents}
+                    onDocumentDeleted={handleHospitalDeleted}
+                    onDocumentUpdated={handleHospitalUpdated}
+                  />
+                )}
+                {activeTab === 1 && (
+                  <NotificationsList 
+                    notifications={notifications}
+                    refreshNotifications={fetchNotifications} 
+                  />
+                )}
+              </Box>
+            </Container>
           </Box>
+          <MessagePopup refreshNotifications={fetchNotifications} />
         </Box>
       )}
 
