@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Box, CircularProgress, Snackbar, Alert, Tabs, Tab, Container, CssBaseline } from '@mui/material';
+import { Box, CircularProgress, Snackbar, Alert, Tabs, Tab, Container, CssBaseline, ClickAwayListener } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase';
+import { dbChat } from './firebase-chat';
 import Login from './components/Login';
 import Header from './components/Header';
 import DocumentList from './components/DocumentList';
@@ -10,6 +11,8 @@ import NotificationsList from './components/NotificationsList';
 import { lightTheme, darkTheme } from './theme';
 import './App.css';
 import MessagePopup from './components/MessagePopup';
+import PasswordPrompt from './components/PasswordPrompt';
+import SecretChat from './components/SecretChat';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -25,6 +28,10 @@ function App() {
     message: '',
     severity: 'info'
   });
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [showSecretChat, setShowSecretChat] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [displayableMessages, setDisplayableMessages] = useState([]);
   
   // Check for existing authentication on component mount
   useEffect(() => {
@@ -77,6 +84,34 @@ function App() {
       isMounted = false;
     };
   }, [isAuthenticated]);
+
+  // Effect to fetch and manage secret chat messages
+  useEffect(() => {
+    if (isAuthenticated && userName) {
+      const q = query(collection(dbChat, 'secret-chat'), orderBy('timestamp'));
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const newUnseenMessages = [];
+        querySnapshot.forEach((doc) => {
+          const message = { id: doc.id, ...doc.data() };
+          if (message.sender !== userName && !message.seenBy?.includes(userName)) {
+            newUnseenMessages.push(message);
+          }
+        });
+
+        if (newUnseenMessages.length > 0) {
+          setDisplayableMessages(prevMessages => [...prevMessages, ...newUnseenMessages]);
+          
+          newUnseenMessages.forEach(async (msg) => {
+            const msgRef = doc(dbChat, 'secret-chat', msg.id);
+            await updateDoc(msgRef, {
+              seenBy: arrayUnion(userName),
+            });
+          });
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [isAuthenticated, userName]);
 
   const fetchDocuments = async (isMounted = true) => {
     setLoading(true);
@@ -222,6 +257,40 @@ function App() {
     setIsDarkMode(!isDarkMode);
   };
 
+  const handleUnlockTrigger = () => {
+    setShowPasswordPrompt(true);
+  };
+
+  const handlePasswordSubmit = (password) => {
+    if (password === '28052025') {
+      setShowPasswordPrompt(false);
+      setShowSecretChat(true);
+      setPasswordError('');
+      setSnackbar({
+        open: true,
+        message: 'Secret chat unlocked!',
+        severity: 'success'
+      });
+    } else {
+      setPasswordError('Incorrect password');
+      setShowPasswordPrompt(false);
+      setSnackbar({
+        open: true,
+        message: 'Incorrect password',
+        severity: 'error'
+      });
+    }
+  };
+
+  const closePasswordPrompt = () => {
+    setShowPasswordPrompt(false);
+    setPasswordError('');
+  }
+
+  const closeSecretChat = () => {
+    setShowSecretChat(false);
+  }
+
   if (loading) {
     return (
       <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
@@ -347,8 +416,31 @@ function App() {
               </Box>
             </Container>
           </Box>
-          <MessagePopup refreshNotifications={fetchNotifications} />
+          <MessagePopup 
+            refreshNotifications={fetchNotifications}
+            onUnlock={handleUnlockTrigger}
+          />
         </Box>
+      )}
+
+      {showPasswordPrompt && (
+        <PasswordPrompt 
+          onSubmit={handlePasswordSubmit} 
+          onClose={closePasswordPrompt}
+          error={passwordError} 
+        />
+      )}
+
+      {showSecretChat && (
+        <ClickAwayListener onClickAway={closeSecretChat}>
+          <div>
+            <SecretChat 
+              onClose={closeSecretChat} 
+              userName={userName}
+              messages={displayableMessages}
+            />
+          </div>
+        </ClickAwayListener>
       )}
 
       <Snackbar

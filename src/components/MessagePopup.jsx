@@ -12,7 +12,8 @@ import {
   Typography,
   Menu,
   MenuItem,
-  ButtonGroup
+  ButtonGroup,
+  Paper
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import MessageIcon from '@mui/icons-material/Message';
@@ -21,15 +22,19 @@ import AddIcon from '@mui/icons-material/Add';
 import { collection, getDocs, setDoc, doc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const MessagePopup = ({ refreshNotifications }) => {
+const MessagePopup = ({ refreshNotifications, onUnlock }) => {
   const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const textFieldRef = useRef(null);
 
   const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {
+    setOpen(false);
+    setMessage('');
+  };
   
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -71,10 +76,24 @@ const MessagePopup = ({ refreshNotifications }) => {
     return nextNumber;
   };
 
-  const handleSendMessage = async () => {
+  const handleSendClick = async () => {
+    if (!message.trim()) return;
+
+    if (message.trim().toLowerCase() === 'unlock') {
+      onUnlock();
+      handleClose();
+      return;
+    }
+    
+    setConfirmOpen(true);
+  };
+  
+  const handleConfirmSend = async () => {
     if (!message.trim()) return;
 
     setLoading(true);
+    setConfirmOpen(false);
+
     try {
       const nextNumber = await getNextMessageNumber();
       const messageId = `Message${nextNumber}`;
@@ -85,7 +104,6 @@ const MessagePopup = ({ refreshNotifications }) => {
         messageNumber: nextNumber
       });
 
-      setMessage('');
       handleClose();
       
       await refreshNotifications();
@@ -157,7 +175,7 @@ const MessagePopup = ({ refreshNotifications }) => {
           </Button>
           <Button
             variant="contained"
-            onClick={handleSendMessage}
+            onClick={handleSendClick}
             disabled={loading || !message.trim()}
             startIcon={<SendIcon />}
           >
@@ -180,6 +198,30 @@ const MessagePopup = ({ refreshNotifications }) => {
                {"{UserName}"}
             </MenuItem>
           </Menu>
+        </DialogActions>
+      </Dialog>
+      
+      <Dialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        aria-labelledby="confirm-dialog-title"
+      >
+        <DialogTitle id="confirm-dialog-title">
+          Confirm Broadcast Message
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to send this message to all users?
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'action.hover', whiteSpace: 'pre-wrap' }}>
+            <Typography>{message}</Typography>
+          </Paper>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleConfirmSend} variant="contained" color="primary" disabled={loading}>
+            {loading ? 'Sending...' : 'Confirm Send'}
+          </Button>
         </DialogActions>
       </Dialog>
     </>
